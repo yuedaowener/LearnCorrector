@@ -1,18 +1,22 @@
 #!usr/bin/env python
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 
 import random
+
 import pandas as pd
 from pypinyin import lazy_pinyin
-from data_loader import load_dataset, save_data
 from sklearn.model_selection import train_test_split
+
+from deeplearning_method.soft_masked_bert.data_loader import load_dataset
+
 
 def is_china_char(ch):
     if u'\u4e00' <= ch <= u'\u9fff':
         return True
     return False
 
-def gen_char_dict(dataset):
+
+def gen_char_dict(dataset):  # 每个字出现的次数。
     char_dict = {}
     for line in dataset:
         line = line.strip()
@@ -20,6 +24,7 @@ def gen_char_dict(dataset):
             if len(char) != 0 and is_china_char(char):
                 char_dict[char] = char_dict.get(char, 0) + 1
     return char_dict
+
 
 def gen_pinyin_dict(dataset, char_dict):
     char_pinyin_dict = {}
@@ -45,11 +50,11 @@ def gen_pinyin_dict(dataset, char_dict):
                 word_count = int(word.split('_')[1])
                 tmp[word_word] = word_count
         data[pinyin] = tmp
-
-
-    f = open('data/pinyin2char.model', 'w')
+    # TODO: 产生这个模型的。
+    f = open('data/pinyin2char_1000.model', 'w')
     f.write(str(data))
     f.close()
+
 
 def load_pinyin_dict(file_path):
     f = open(file_path, 'r')
@@ -71,9 +76,9 @@ def random_word(sentence, char_pinyin_dict, char_dict, confusion_dict=None):
             prob /= 0.15
             # 谐音 80%
             if prob < 0.80:
-                candiation = char_pinyin_dict.get(''.join(lazy_pinyin(token)), {token:''})
-                candiation = sorted(candiation.items(), key=lambda x:x[1], reverse=True)
-                candiation = candiation[:int(len(candiation)/2+0.5)]
+                candiation = char_pinyin_dict.get(''.join(lazy_pinyin(token)), {token: ''})
+                candiation = sorted(candiation.items(), key=lambda x: x[1], reverse=True)
+                candiation = candiation[:int(len(candiation) / 2 + 0.5)]
                 candiation = [x[0] for x in candiation if x[0] != token]
                 if len(candiation) == 0:
                     out.append(str(0))
@@ -81,8 +86,8 @@ def random_word(sentence, char_pinyin_dict, char_dict, confusion_dict=None):
                 tokens[i] = random.choice(candiation)
             # 随机 20%
             else:
-                candiation = sorted(char_dict.items(), key=lambda x:x[1], reverse=True)
-                candiation = candiation[:int(len(candiation)/2+0.5)]
+                candiation = sorted(char_dict.items(), key=lambda x: x[1], reverse=True)
+                candiation = candiation[:int(len(candiation) / 2 + 0.5)]
                 candiation = [x[0] for x in candiation if x[0] != token]
                 if len(candiation) == 0:
                     out.append(str(0))
@@ -114,26 +119,31 @@ def random_dataset(dataset, char_pinyin_dict, char_dict):
     return text, out
 
 
-if __name__ == '__main__':
-    dataset = load_dataset('data/processed_data/all_same_765376/all_data_765376.txt')
+def main():
+    dataset = load_dataset('data/processed_data/all_same_765376/all_data_765376_1000.txt')
     char_dict = gen_char_dict(dataset)
     # gen_pinyin_dict(dataset, char_dict)
-    char_pinyin_dict = load_pinyin_dict('data/pinyin2char.model')
+    char_pinyin_dict = load_pinyin_dict('data/pinyin2char_1000.model')
     process_dataset, process_label = random_dataset(dataset, char_pinyin_dict, char_dict)
     # save_data(process_dataset, 'data/processed_data/process_data_765376.txt')
-    df = pd.DataFrame(columns=['origin_text','random_text','label'])
+    df = pd.DataFrame(columns=['origin_text', 'random_text', 'label'])
     df['origin_text'] = dataset
     df['random_text'] = process_dataset
     df['label'] = process_label
-    df.to_csv('data/processed_data/processed_765376.csv', index=False)
+    df.to_csv('data/processed_data/processed_765376_1000.csv', index=False)
 
     # df = pd.read_csv('data/processed_data/all_same_765376/processed_765376.csv')
 
     dataset = df.values
     train, test = train_test_split(dataset, test_size=0.1)
-    df = pd.DataFrame(columns=['origin_text','random_text','label'], data=train)
-    df.to_csv('data/processed_data/all_same_765376/train.csv', index=False)
-    df = pd.DataFrame(columns=['origin_text','random_text','label'], data=test)
-    df.to_csv('data/processed_data/all_same_765376/test.csv', index=False)
+    df = pd.DataFrame(columns=['origin_text', 'random_text', 'label'], data=train)
+    df.to_csv('data/processed_data/all_same_765376/train_1000.csv', index=False)
+    df = pd.DataFrame(columns=['origin_text', 'random_text', 'label'], data=test)
+    df.to_csv('data/processed_data/all_same_765376/test_1000.csv', index=False)
+
+    pass
 
 
+if __name__ == '__main__':
+    main()
+    pass

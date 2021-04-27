@@ -1,11 +1,12 @@
 #!usr/bin/env python
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 
 import torch
 import torch.nn as nn
 from transformers import BertTokenizer, BertModel, BertConfig
 
-from .decotor import BiGRU
+from deeplearning_method.soft_masked_bert.model.decotor import BiGRU
+# from .decotor import BiGRU
 
 
 class SoftMaskedBert(nn.Module):
@@ -13,6 +14,7 @@ class SoftMaskedBert(nn.Module):
     Soft-Masked Bert
     论文：https://arxiv.org/pdf/2005.07421.pdf
     """
+
     def __init__(self, bert, tokenizer, hidden, layer_n, device):
         super(SoftMaskedBert, self).__init__()
         # self.bert = bert
@@ -23,7 +25,9 @@ class SoftMaskedBert(nn.Module):
 
         self.detector = BiGRU(embedding_size, hidden, layer_n)
         self.corrector = bert.encoder
+        # TODO： mask到底是什么意思？
         mask_token_id = torch.tensor([[tokenizer.mask_token_id]]).to(device)
+        # TODO: mask_e？
         self.mask_e = self.embedding(mask_token_id)
         self.linear = nn.Linear(embedding_size, self.config.vocab_size)
         self.softmax = nn.LogSoftmax(dim=-1)
@@ -31,12 +35,13 @@ class SoftMaskedBert(nn.Module):
     def forward(self, input_ids, input_mask, segment_ids):
         e = self.embedding(input_ids=input_ids, token_type_ids=segment_ids)
         p = self.detector(e)
-        e_ = p * self.mask_e + (1-p) * e
+        # 论文公式（5）
+        e_ = p * self.mask_e + (1 - p) * e
         _, _, _, _, \
         _, \
         head_mask, \
         encoder_hidden_states, \
-        encoder_extended_attention_mask= self._init_inputs(input_ids, input_mask)
+        encoder_extended_attention_mask = self._init_inputs(input_ids, input_mask)
         h = self.corrector(e_,
                            attention_mask=encoder_extended_attention_mask,
                            head_mask=head_mask,
@@ -47,15 +52,15 @@ class SoftMaskedBert(nn.Module):
         return out, p
 
     def _init_inputs(self,
-                    input_ids=None,
-                    attention_mask=None,
-                    token_type_ids=None,
-                    position_ids=None,
-                    head_mask=None,
-                    inputs_embeds=None,
-                    encoder_hidden_states=None,
-                    encoder_attention_mask=None,
-                    ):
+                     input_ids=None,
+                     attention_mask=None,
+                     token_type_ids=None,
+                     position_ids=None,
+                     head_mask=None,
+                     inputs_embeds=None,
+                     encoder_hidden_states=None,
+                     encoder_attention_mask=None,
+                     ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -154,16 +159,24 @@ class SoftMaskedBert(nn.Module):
                extended_attention_mask, head_mask, encoder_hidden_states, encoder_extended_attention_mask
 
 
-# if __name__ == "__main__":
-#     config = BertConfig.from_pretrained('../data/chinese_wwm_pytorch/bert_config.json')
-#     tokenizer = BertTokenizer.from_pretrained('../data/chinese_wwm_pytorch/vocab.txt')
-#     bert = BertModel.from_pretrained('../data/chinese_wwm_pytorch/pytorch_model.bin', config=config)
-#     model = SoftMaskedBert(bert, tokenizer, 2, 1)
-#     text = '中国的'
-#     token = tokenizer.tokenize(text)
-#     ids = tokenizer.convert_tokens_to_ids(token)
-#     ids = torch.Tensor([ids]).long()
-#     print(ids)
-#     out = model(ids)
-#     # out = bert(ids)
-#     print(out)
+def main():
+    # 直接下载：https://github.com/ymcui/Chinese-BERT-wwm
+    config = BertConfig.from_pretrained('../data/chinese_wwm_pytorch/bert_config.json')
+    tokenizer = BertTokenizer.from_pretrained('../data/chinese_wwm_pytorch/vocab.txt')
+    bert = BertModel.from_pretrained('../data/chinese_wwm_pytorch/pytorch_model.bin', config=config)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = SoftMaskedBert(bert, tokenizer, 2, 1, device=device)
+    text = '中国的'
+    token = tokenizer.tokenize(text)
+    ids = tokenizer.convert_tokens_to_ids(token)
+    ids = torch.Tensor([ids]).long()
+    print(ids)
+    # FIXME: forward() missing 2 required positional arguments: 'input_mask' and 'segment_ids'
+    out = model(ids)
+    # out = bert(ids)
+    print(out)
+    pass
+
+
+if __name__ == "__main__":
+    main()

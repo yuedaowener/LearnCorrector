@@ -1,23 +1,29 @@
 #!usr/bin/env python
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 
 import os
-import tqdm
+
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.optim import Adam
-from transformers import BertTokenizer, BertModel, BertConfig
-from optim_schedule import ScheduledOptim
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from model import SoftMaskedBert
+import tqdm
 from sklearn.model_selection import KFold
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
+from transformers import BertTokenizer, BertModel, BertConfig
+# TODO: transformer 和bert什么关系？
+
+from deeplearning_method.soft_masked_bert.model import SoftMaskedBert
+from deeplearning_method.soft_masked_bert.optim_schedule import ScheduledOptim
+
 MAX_INPUT_LEN = 512
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
+
 class SoftMaskedBertTrainer():
-    def __init__(self, bert, tokenizer, device, hidden=256, layer_n=1, lr=2e-5, gama=0.8, betas=(0.9, 0.999), weight_decay=0.01, warmup_steps=10000):
+    def __init__(self, bert, tokenizer, device, hidden=256, layer_n=1, lr=2e-5, gama=0.8, betas=(0.9, 0.999),
+                 weight_decay=0.01, warmup_steps=10000):
 
         self.device = device
         self.tokenizer = tokenizer
@@ -46,14 +52,15 @@ class SoftMaskedBertTrainer():
         self.model.eval()
         out_put = []
         data_loader = tqdm.tqdm(enumerate(data_loader),
-                              desc="%s" % 'Inference:',
-                              total=len(data_loader),
-                              bar_format="{l_bar}{r_bar}")
+                                desc="%s" % 'Inference:',
+                                total=len(data_loader),
+                                bar_format="{l_bar}{r_bar}")
         for i, data in data_loader:
             # 0. batch_data will be sent into the device(GPU or cpu)
             data = {key: value.to(self.device) for key, value in data.items()}
 
-            out, prob = self.model(data["input_ids"], data["input_mask"], data["segment_ids"]) #prob [batch_size, seq_len, 1]
+            out, prob = self.model(data["input_ids"], data["input_mask"],
+                                   data["segment_ids"])  # prob [batch_size, seq_len, 1]
             out_put.extend(out.argmax(dim=-1).cpu().numpy().tolist())
         return [''.join(self.tokenizer.convert_ids_to_tokens(x)) for x in out_put]
 
@@ -73,9 +80,9 @@ class SoftMaskedBertTrainer():
 
         # Setting the tqdm progress bar
         data_loader = tqdm.tqdm(enumerate(data_loader),
-                              desc="EP_%s:%d" % (str_code, epoch),
-                              total=len(data_loader),
-                              bar_format="{l_bar}{r_bar}")
+                                desc="EP_%s:%d" % (str_code, epoch),
+                                total=len(data_loader),
+                                bar_format="{l_bar}{r_bar}")
 
         avg_loss = 0.0
         # total_correct = 0
@@ -87,11 +94,12 @@ class SoftMaskedBertTrainer():
             # 0. batch_data will be sent into the device(GPU or cpu)
             data = {key: value.to(self.device) for key, value in data.items()}
 
-            out, prob = self.model(data["input_ids"], data["input_mask"], data["segment_ids"]) #prob [batch_size, seq_len, 1]
+            out, prob = self.model(data["input_ids"], data["input_mask"],
+                                   data["segment_ids"])  # prob [batch_size, seq_len, 1]
             prob = prob.reshape(-1, prob.shape[1])
             loss_d = self.criterion_d(prob, data['label'].float())
             loss_c = self.criterion_c(out.transpose(1, 2), data["output_ids"])
-            loss = self.gama * loss_c + (1-self.gama) * loss_d
+            loss = self.gama * loss_c + (1 - self.gama) * loss_d
 
             if train:
                 self.optim_schedule.zero_grad()
@@ -105,8 +113,8 @@ class SoftMaskedBertTrainer():
             d_correct += sum([prob[i].equal(data['label'][i]) for i in range(len(prob))])
 
             avg_loss += loss.item()
-        #     total_correct += c_correct
-        #     # total_element += data["label"].nelement()
+            #     total_correct += c_correct
+            #     # total_element += data["label"].nelement()
             total_element += len(data)
 
             post_fix = {
@@ -187,8 +195,10 @@ class BertDataset(Dataset):
             }
         return {key: torch.tensor(value) for key, value in output.items()}
 
-if __name__ == '__main__':
-    dataset = pd.read_csv('data/processed_data/all_same_765376/train.csv')
+
+def main():
+    # TODO: data是什么类型的？
+    dataset = pd.read_csv('data/processed_data/all_same_765376/train_1000.csv')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     config = BertConfig.from_pretrained('data/chinese_wwm_pytorch/bert_config.json')
     tokenizer = BertTokenizer.from_pretrained('data/chinese_wwm_pytorch/vocab.txt')
@@ -196,7 +206,7 @@ if __name__ == '__main__':
     for k, (train_index, val_index) in enumerate(kf.split(range(len(dataset)))):
         print('Start train {} ford'.format(k))
         bert = BertModel.from_pretrained('data/chinese_wwm_pytorch/pytorch_model.bin', config=config)
-
+        # TODO: 加载进来直接就是个模型了？因为用了torch的结构？
         train = dataset.iloc[train_index]
         val = dataset.iloc[val_index]
         train = BertDataset(tokenizer, train, max_len=152)
@@ -217,3 +227,9 @@ if __name__ == '__main__':
             for i in trainer.inference(val):
                 print(i)
                 print('\n')
+
+    pass
+
+
+if __name__ == '__main__':
+    main()
